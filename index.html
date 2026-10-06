@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b100c">
+    <title>Лайм — чат-комнаты</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #090e0b;
+            --panel: #111914;
+            --panel-soft: #151f18;
+            --panel-raised: #1b281e;
+            --line: rgba(219, 255, 203, .09);
+            --line-strong: rgba(219, 255, 203, .15);
+            --text: #f0f5ed;
+            --muted: #879489;
+            --muted-light: #aab5aa;
+            --lime: #cdf47a;
+            --lime-bright: #d9ff91;
+            --lime-deep: #9dcf4e;
+            --green: #6fc476;
+            --danger: #ff8585;
+            --shadow: 0 24px 70px rgba(0, 0, 0, .3);
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            min-width: 320px;
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            color: var(--text);
+            background:
+                radial-gradient(ellipse at 13% 0%, rgba(111, 163, 75, .14), transparent 34%),
+                radial-gradient(ellipse at 100% 100%, rgba(77, 127, 69, .11), transparent 37%),
+                var(--bg);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body::before {
+            position: fixed;
+            z-index: 0;
+            top: -170px;
+            right: 18%;
+            width: 390px;
+            height: 390px;
+            border-radius: 50%;
+            background: rgba(179, 235, 105, .045);
+            filter: blur(90px);
+            content: "";
+            pointer-events: none;
+            animation: ambient-drift 13s ease-in-out infinite alternate;
+        }
+
+        button, input { font: inherit; }
+        button { color: inherit; }
+        button:focus-visible, input:focus-visible {
+            outline: 2px solid var(--lime);
+            outline-offset: 3px;
+        }
+        [hidden] { display: none !important; }
+        .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+        .app-shell {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            gap: 14px;
+            width: 100%;
+            max-width: 1680px;
+            height: 100%;
+            margin: 0 auto;
+            padding: 14px;
+        }
+
+        /* Левая панель */
+        .sidebar {
+            position: relative;
+            display: flex;
+            flex: 0 0 304px;
+            flex-direction: column;
+            width: 304px;
+            min-height: 0;
+            overflow: hidden;
+            padding: 19px 17px 14px;
+            border: 1px solid var(--line);
+            border-radius: 23px;
+            background: linear-gradient(155deg, rgba(21, 31, 24, .98), rgba(13, 19, 15, .98));
+            box-shadow: var(--shadow);
+        }
+
+        .sidebar::before {
+            position: absolute;
+            top: -110px;
+            left: -80px;
+            width: 230px;
+            height: 210px;
+            border-radius: 50%;
+            background: rgba(172, 226, 96, .08);
+            filter: blur(65px);
+            content: "";
+            pointer-events: none;
+        }
+
+        .sidebar-header, .join-card, .rooms-heading, .rooms-list, .sidebar-footer {
+            position: relative;
+            z-index: 1;
+        }
+
+        .sidebar-header { margin-bottom: 17px; }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            min-width: 0;
+        }
+
+        .brand-mark {
+            display: grid;
+            flex: 0 0 40px;
+            width: 40px;
+            height: 40px;
+            place-items: center;
+            border: 1px solid rgba(236, 255, 213, .32);
+            border-radius: 14px;
+            color: #18220f;
+            background: linear-gradient(145deg, #e1ff9c, #a6dd59);
+            box-shadow: 0 5px 22px rgba(182, 231, 105, .19), inset 0 1px rgba(255,255,255,.5);
+        }
+
+        .brand-mark svg { width: 21px; height: 21px; }
+        .brand-name { display: block; font-size: 17px; font-weight: 760; letter-spacing: -.055em; line-height: 1.05; }
+        .brand-caption { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .16em; }
+
+        .btn-create {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            width: 100%;
+            min-height: 45px;
+            margin-top: 17px;
+            padding: 0 15px;
+            border: 0;
+            border-radius: 13px;
+            color: #17200f;
+            background: linear-gradient(135deg, var(--lime-bright), #b5e968 68%, #a6d953);
+            box-shadow: 0 8px 23px rgba(166, 218, 91, .15), inset 0 1px rgba(255,255,255,.55);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 760;
+            transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
+        }
+
+        .btn-create svg { width: 17px; height: 17px; }
+        .btn-create:hover { transform: translateY(-2px); box-shadow: 0 12px 29px rgba(166, 218, 91, .24), inset 0 1px rgba(255,255,255,.55); filter: saturate(1.08); }
+        .btn-create:active { transform: translateY(0) scale(.985); }
+
+        .join-card {
+            padding: 13px 13px 12px;
+            border: 1px solid rgba(210, 245, 191, .085);
+            border-radius: 16px;
+            background: linear-gradient(145deg, rgba(31, 44, 34, .83), rgba(23, 33, 26, .83));
+            box-shadow: inset 0 1px rgba(255,255,255,.025);
+        }
+
+        .join-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+        .eyebrow { margin: 0; color: #92a091; font-size: 9px; font-weight: 760; letter-spacing: .14em; line-height: 1.35; }
+        .join-title { margin: 4px 0 0; color: var(--text); font-size: 13px; font-weight: 650; letter-spacing: -.02em; }
+        .join-decor { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid rgba(205, 244, 122, .11); border-radius: 10px; color: var(--lime); background: rgba(205, 244, 122, .055); }
+        .join-decor svg { width: 15px; height: 15px; }
+
+        .join-control {
+            display: flex;
+            gap: 7px;
+            padding: 4px;
+            border: 1px solid rgba(213, 242, 202, .11);
+            border-radius: 12px;
+            background: rgba(7, 12, 9, .47);
+            transition: border-color .2s ease, box-shadow .2s ease;
+        }
+
+        .join-control:focus-within { border-color: rgba(205, 244, 122, .52); box-shadow: 0 0 0 3px rgba(205, 244, 122, .07); }
+        .join-control input {
+            width: 0;
+            min-width: 0;
+            flex: 1;
+            padding: 0 9px;
+            border: 0;
+            outline: 0;
+            color: var(--text);
+            background: transparent;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .105em;
+            text-transform: uppercase;
+        }
+        .join-control input::placeholder { color: #667266; font-size: 10px; font-weight: 580; letter-spacing: .06em; text-transform: none; }
+        .join-submit {
+            display: grid;
+            flex: 0 0 36px;
+            width: 36px;
+            height: 36px;
+            place-items: center;
+            border: 0;
+            border-radius: 9px;
+            color: #17200f;
+            background: var(--lime);
+            cursor: pointer;
+            transition: transform .18s ease, background .18s ease;
+        }
+        .join-submit:hover { transform: translateX(2px); background: var(--lime-bright); }
+        .join-submit svg { width: 16px; height: 16px; }
+        .error-text { margin: 8px 2px 0; color: var(--danger); font-size: 11px; line-height: 1.4; animation: rise-in .18s ease both; }
+
+        .rooms-heading { display: flex; align-items: center; justify-content: space-between; padding: 19px 4px 9px; }
+        .room-count { display: grid; min-width: 22px; height: 20px; padding: 0 6px; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--muted-light); background: rgba(255,255,255,.025); font-size: 10px; font-weight: 700; }
+        .rooms-list { display: flex; flex: 1; flex-direction: column; gap: 5px; min-height: 50px; overflow: auto; padding: 0 2px 4px 0; scrollbar-color: rgba(205,244,122,.17) transparent; scrollbar-width: thin; }
+
+        .room-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            min-height: 58px;
+            padding: 8px 10px;
+            border: 1px solid transparent;
+            border-radius: 13px;
+            color: var(--text);
+            text-align: left;
+            background: transparent;
+            cursor: pointer;
+            transition: background .18s ease, border-color .18s ease, transform .18s ease;
+            animation: rise-in .24s ease both;
+        }
+        .room-item:hover { transform: translateX(2px); border-color: rgba(213, 244, 184, .07); background: rgba(255,255,255,.035); }
+        .room-item.active { border-color: rgba(205,244,122,.16); background: linear-gradient(100deg, rgba(179, 226, 99, .13), rgba(179, 226, 99, .055)); }
+        .room-icon { display: grid; flex: 0 0 36px; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(206, 246, 184, .07); border-radius: 11px; color: #a8b5a4; background: rgba(255,255,255,.035); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; font-weight: 600; transition: color .18s ease, background .18s ease; }
+        .room-item.active .room-icon { border-color: rgba(205,244,122,.18); color: #18220f; background: var(--lime); }
+        .room-info { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
+        .room-name { overflow: hidden; color: #e7eee5; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+        .room-code { color: #778578; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; letter-spacing: .055em; }
+        .room-item.active .room-name { color: var(--lime-bright); }
+        .room-active-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 10px rgba(205,244,122,.56); opacity: 0; transition: opacity .18s ease; }
+        .room-item.active .room-active-dot { opacity: 1; }
+        .rooms-empty { margin: 5px 1px; padding: 13px 11px; border: 1px dashed rgba(213, 244, 184, .12); border-radius: 12px; color: #849184; font-size: 11px; line-height: 1.55; }
+
+        .sidebar-footer { display: flex; align-items: center; gap: 8px; margin-top: 11px; padding: 12px 3px 2px; border-top: 1px solid var(--line); color: #8c9a8e; font-size: 10px; }
+        .status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #9bd668; box-shadow: 0 0 0 4px rgba(155,214,104,.09), 0 0 11px rgba(155,214,104,.45); animation: status-pulse 2.2s ease-in-out infinite; }
+        .local-tag { margin-left: auto; padding: 4px 7px; border: 1px solid rgba(205,244,122,.1); border-radius: 7px; color: #adc988; background: rgba(205,244,122,.045); font-size: 9px; }
+
+        /* Окно чата */
+        .chat-area {
+            position: relative;
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 23px;
+            background: linear-gradient(150deg, rgba(17, 25, 20, .96), rgba(12, 18, 14, .985));
+            box-shadow: var(--shadow);
+            animation: app-enter .55s cubic-bezier(.2,.7,.2,1) both;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            min-height: 101px;
+            padding: 20px 27px;
+            border-bottom: 1px solid var(--line);
+            background: rgba(255,255,255,.012);
+        }
+
+        .room-heading { display: flex; align-items: center; gap: 14px; min-width: 0; }
+        .room-symbol { display: grid; flex: 0 0 46px; width: 46px; height: 46px; place-items: center; border: 1px solid rgba(205,244,122,.13); border-radius: 15px; color: var(--lime); background: linear-gradient(145deg, rgba(205,244,122,.12), rgba(205,244,122,.035)); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 21px; font-weight: 500; }
+        .chat-heading-copy { min-width: 0; }
+        .chat-header h1 { overflow: hidden; margin: 4px 0 3px; color: var(--text); font-size: 19px; font-weight: 720; letter-spacing: -.045em; text-overflow: ellipsis; white-space: nowrap; }
+        .chat-subtitle { overflow: hidden; margin: 0; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+        .code-box { display: flex; align-items: center; gap: 15px; flex: 0 0 auto; padding: 8px 9px 8px 13px; border: 1px solid rgba(205,244,122,.12); border-radius: 14px; background: rgba(205,244,122,.035); animation: rise-in .24s ease both; }
+        .code-meta { display: flex; flex-direction: column; gap: 4px; }
+        .code-meta .eyebrow { color: #82917d; font-size: 8px; }
+        .code-value { color: var(--lime-bright); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 750; letter-spacing: .12em; }
+        .btn-copy { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; padding: 0 10px; border: 1px solid rgba(211,241,196,.09); border-radius: 10px; color: #cfdbc9; background: rgba(255,255,255,.045); cursor: pointer; font-size: 10px; font-weight: 650; transition: border-color .18s ease, color .18s ease, background .18s ease; }
+        .btn-copy:hover { border-color: rgba(205,244,122,.25); color: var(--lime-bright); background: rgba(205,244,122,.08); }
+        .btn-copy svg { width: 14px; height: 14px; }
+
+        .messages-container {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            gap: 14px;
+            min-height: 0;
+            overflow: auto;
+            padding: 24px clamp(18px, 4vw, 54px) 18px;
+            scroll-behavior: smooth;
+            scrollbar-color: rgba(205,244,122,.18) transparent;
+            scrollbar-width: thin;
+        }
+
+        .welcome-card { width: min(100%, 570px); margin: auto; padding: 12px 15px 18px; text-align: center; animation: welcome-in .8s cubic-bezier(.2,.75,.2,1) both; }
+        .welcome-art { position: relative; display: grid; width: 150px; height: 150px; margin: 0 auto 23px; place-items: center; }
+        .welcome-orbit { position: absolute; border: 1px solid rgba(205,244,122,.14); border-radius: 50%; animation: orbit-breathe 4.8s ease-in-out infinite; }
+        .welcome-orbit.one { inset: 8px; }
+        .welcome-orbit.two { inset: 22px; border-color: rgba(205,244,122,.09); animation-delay: -2.4s; }
+        .welcome-orbit::after { position: absolute; top: 15%; right: 14%; width: 6px; height: 6px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 13px rgba(205,244,122,.8); content: ""; }
+        .welcome-core { position: relative; display: grid; width: 76px; height: 76px; place-items: center; border: 1px solid rgba(239,255,216,.46); border-radius: 27px; color: #15200e; background: linear-gradient(145deg, #e3ffac, #a7de5b); box-shadow: 0 13px 43px rgba(170,224,91,.19), inset 0 1px rgba(255,255,255,.7); animation: core-float 4s ease-in-out infinite; }
+        .welcome-core svg { width: 32px; height: 32px; }
+        .welcome-spark { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #d9ff91; box-shadow: 0 0 14px rgba(217,255,145,.8); animation: sparkle 2.5s ease-in-out infinite; }
+        .welcome-spark.a { top: 21px; left: 25px; }
+        .welcome-spark.b { right: 17px; bottom: 30px; width: 4px; height: 4px; animation-delay: -1.2s; }
+        .welcome-card .eyebrow { color: #a8c88a; }
+        .welcome-card h2 { margin: 11px 0 10px; color: #f1f7ec; font-size: clamp(25px, 3vw, 34px); font-weight: 740; letter-spacing: -.065em; line-height: 1.1; }
+        .welcome-copy { max-width: 430px; margin: 0 auto; color: #98a498; font-size: 13px; line-height: 1.7; }
+        .welcome-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 9px; margin-top: 23px; }
+        .welcome-create, .welcome-join { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 16px; border-radius: 12px; cursor: pointer; font-size: 11px; font-weight: 700; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
+        .welcome-create { border: 0; color: #17200f; background: var(--lime); box-shadow: 0 7px 22px rgba(181,226,105,.13); }
+        .welcome-create:hover { transform: translateY(-2px); background: var(--lime-bright); }
+        .welcome-join { border: 1px solid rgba(213,242,202,.13); color: #c9d4c7; background: rgba(255,255,255,.025); }
+        .welcome-join:hover { transform: translateY(-2px); border-color: rgba(205,244,122,.24); color: var(--lime-bright); background: rgba(205,244,122,.05); }
+        .welcome-create svg, .welcome-join svg { width: 15px; height: 15px; }
+
+        .empty-room-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 30px 15px; color: #98a498; text-align: center; animation: welcome-in .45s ease both; }
+        .empty-room-icon { display: grid; width: 57px; height: 57px; margin-bottom: 15px; place-items: center; border: 1px solid rgba(205,244,122,.12); border-radius: 19px; color: var(--lime); background: rgba(205,244,122,.055); font-size: 22px; }
+        .empty-room-state strong { margin-bottom: 5px; color: #e9f0e6; font-size: 14px; font-weight: 650; }
+        .empty-room-state span { font-size: 11px; }
+
+        .message { display: flex; flex-direction: column; gap: 5px; max-width: min(76%, 680px); animation: message-in .26s cubic-bezier(.2,.75,.2,1) both; }
+        .message.other-message { align-self: flex-start; align-items: flex-start; }
+        .message.my-message { align-self: flex-end; align-items: flex-end; }
+        .message-meta { display: flex; align-items: center; gap: 8px; padding: 0 3px; color: #859286; font-size: 9px; }
+        .message.my-message .message-meta { flex-direction: row-reverse; }
+        .message-author { color: #b9c6b7; font-weight: 650; }
+        .message.my-message .message-author { color: #adc987; }
+        .message-time { color: #718073; font-variant-numeric: tabular-nums; }
+        .message-bubble { padding: 12px 15px; border: 1px solid rgba(213,242,202,.075); border-radius: 4px 16px 16px 16px; color: #e1e9df; background: linear-gradient(145deg, #1a251d, #17211a); box-shadow: 0 6px 18px rgba(0,0,0,.11); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
+        .my-message .message-bubble { border-color: rgba(233,255,202,.35); border-radius: 16px 4px 16px 16px; color: #19220f; background: linear-gradient(145deg, #d8ff91, #b9e86a); box-shadow: 0 7px 20px rgba(164,214,85,.11); }
+
+        .chat-input-area { flex: 0 0 auto; padding: 13px 26px 17px; border-top: 1px solid var(--line); background: rgba(255,255,255,.012); }
+        .composer-wrap { display: flex; align-items: center; gap: 10px; max-width: 940px; margin: 0 auto; padding: 6px 7px 6px 13px; border: 1px solid rgba(213,242,202,.12); border-radius: 16px; background: rgba(24, 34, 27, .94); box-shadow: 0 8px 24px rgba(0,0,0,.12); transition: border-color .2s ease, box-shadow .2s ease; }
+        .composer-wrap:focus-within { border-color: rgba(205,244,122,.34); box-shadow: 0 0 0 3px rgba(205,244,122,.045), 0 8px 24px rgba(0,0,0,.12); }
+        .compose-icon { display: grid; flex: 0 0 30px; width: 30px; height: 30px; place-items: center; color: #9eae9c; }
+        .compose-icon svg { width: 17px; height: 17px; }
+        .composer-wrap input { flex: 1; min-width: 0; height: 42px; padding: 0 2px; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 13px; }
+        .composer-wrap input::placeholder { color: #7f8d80; }
+        .btn-send { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 111px; height: 40px; padding: 0 14px; border: 0; border-radius: 12px; color: #17200f; background: var(--lime); cursor: pointer; font-size: 11px; font-weight: 760; box-shadow: 0 4px 15px rgba(184,229,103,.13); transition: transform .18s ease, background .18s ease, box-shadow .18s ease; }
+        .btn-send:hover { transform: translateY(-1px); background: var(--lime-bright); box-shadow: 0 7px 19px rgba(184,229,103,.21); }
+        .btn-send:active { transform: translateY(0) scale(.97); }
+        .btn-send svg { width: 15px; height: 15px; }
+        .compose-footer { display: flex; justify-content: space-between; gap: 12px; max-width: 940px; margin: 8px auto 0; padding: 0 3px; color: #768276; font-size: 9px; }
+        .compose-footer kbd { padding: 2px 5px; border: 1px solid rgba(213,242,202,.1); border-radius: 5px; color: #aab7a8; background: rgba(255,255,255,.025); font-family: inherit; font-size: 9px; }
+
+        .toast { position: fixed; z-index: 5; right: 27px; bottom: 25px; display: flex; align-items: center; gap: 10px; max-width: min(400px, calc(100vw - 32px)); padding: 13px 16px; border: 1px solid rgba(205,244,122,.16); border-radius: 13px; color: #e9f2e6; background: rgba(25, 37, 28, .96); box-shadow: 0 15px 40px rgba(0,0,0,.35); font-size: 12px; opacity: 0; pointer-events: none; transform: translateY(10px); transition: opacity .22s ease, transform .22s ease; backdrop-filter: blur(14px); }
+        .toast::before { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 12px rgba(205,244,122,.55); content: ""; }
+        .toast.is-visible { opacity: 1; transform: translateY(0); }
+        .toast.toast-error { border-color: rgba(255,133,133,.25); }
+        .toast.toast-error::before { background: var(--danger); box-shadow: 0 0 12px rgba(255,133,133,.5); }
+
+        @keyframes app-enter { from { opacity: 0; transform: translateY(8px) scale(.995); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes welcome-in { from { opacity: 0; transform: translateY(13px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes rise-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes message-in { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes core-float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6px) rotate(2deg); } }
+        @keyframes orbit-breathe { 0%, 100% { transform: scale(.97); opacity: .6; } 50% { transform: scale(1.035); opacity: 1; } }
+        @keyframes sparkle { 0%, 100% { transform: scale(.65); opacity: .45; } 50% { transform: scale(1.3); opacity: 1; } }
+        @keyframes status-pulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(155,214,104,.07), 0 0 8px rgba(155,214,104,.3); } 50% { box-shadow: 0 0 0 5px rgba(155,214,104,.1), 0 0 13px rgba(155,214,104,.55); } }
+        @keyframes ambient-drift { from { transform: translate3d(-25px, -8px, 0) scale(.9); } to { transform: translate3d(35px, 28px, 0) scale(1.12); } }
+
+        @media (max-width: 1050px) {
+            .app-shell { gap: 10px; padding: 10px; }
+            .sidebar { flex-basis: 276px; width: 276px; padding-right: 14px; padding-left: 14px; }
+            .chat-header { padding-right: 20px; padding-left: 20px; }
+            .messages-container { padding-right: 28px; padding-left: 28px; }
+        }
+
+        @media (max-width: 720px) {
+            .app-shell { flex-direction: column; gap: 8px; padding: 8px; }
+            .sidebar { flex: 0 1 40dvh; width: 100%; max-height: 43dvh; min-height: 220px; padding: 12px; border-radius: 19px; }
+            .sidebar-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+            .brand { gap: 9px; }
+            .brand-mark { flex-basis: 35px; width: 35px; height: 35px; border-radius: 12px; }
+            .brand-mark svg { width: 19px; height: 19px; }
+            .brand-name { font-size: 15px; }
+            .brand-caption { margin-top: 3px; font-size: 8px; }
+            .btn-create { flex: 0 0 auto; width: auto; min-height: 38px; margin: 0; padding: 0 12px; border-radius: 11px; font-size: 11px; }
+            .btn-create svg { width: 15px; height: 15px; }
+            .join-card { padding: 9px 10px; border-radius: 13px; }
+            .join-card-top { margin-bottom: 7px; }
+            .join-decor { width: 26px; height: 26px; }
+            .join-title { margin-top: 2px; font-size: 11px; }
+            .eyebrow { font-size: 8px; }
+            .join-control { gap: 5px; padding: 3px; }
+            .join-control input { font-size: 11px; }
+            .join-submit { flex-basis: 32px; width: 32px; height: 32px; }
+            .rooms-heading { padding: 11px 3px 6px; }
+            .room-count { min-width: 19px; height: 18px; font-size: 9px; }
+            .rooms-list { min-height: 20px; gap: 4px; }
+            .room-item { min-height: 46px; padding: 5px 7px; border-radius: 11px; }
+            .room-icon { flex-basis: 31px; width: 31px; height: 31px; border-radius: 9px; font-size: 15px; }
+            .room-name { font-size: 11px; }
+            .room-code { font-size: 8px; }
+            .sidebar-footer { display: none; }
+            .chat-area { flex: 1 1 0; min-height: 0; border-radius: 19px; }
+            .chat-header { min-height: 76px; padding: 12px 15px; gap: 8px; }
+            .room-heading { gap: 10px; }
+            .room-symbol { flex-basis: 39px; width: 39px; height: 39px; border-radius: 13px; font-size: 18px; }
+            .chat-header h1 { margin-top: 3px; font-size: 16px; }
+            .chat-subtitle { max-width: 42vw; font-size: 9px; }
+            .code-box { gap: 7px; padding: 6px; border-radius: 12px; }
+            .code-meta { padding-left: 4px; }
+            .code-meta .eyebrow { font-size: 7px; }
+            .code-value { font-size: 11px; }
+            .btn-copy { width: 32px; min-height: 32px; padding: 0; }
+            .btn-copy span { display: none; }
+            .messages-container { gap: 11px; padding: 16px 13px 12px; }
+            .welcome-card { padding: 5px 3px 12px; }
+            .welcome-art { width: 116px; height: 116px; margin-bottom: 17px; }
+            .welcome-core { width: 63px; height: 63px; border-radius: 22px; }
+            .welcome-core svg { width: 27px; height: 27px; }
+            .welcome-card h2 { margin-top: 9px; font-size: clamp(24px, 7vw, 31px); }
+            .welcome-copy { max-width: 350px; font-size: 12px; }
+            .welcome-actions { gap: 7px; margin-top: 19px; }
+            .welcome-create, .welcome-join { min-height: 39px; padding: 0 12px; font-size: 10px; }
+            .message { max-width: 88%; }
+            .message-bubble { padding: 10px 12px; font-size: 12px; }
+            .chat-input-area { padding: 10px 11px 12px; }
+            .composer-wrap { gap: 6px; padding: 5px 5px 5px 9px; border-radius: 14px; }
+            .compose-icon { flex-basis: 25px; width: 25px; }
+            .compose-icon svg { width: 15px; height: 15px; }
+            .composer-wrap input { height: 38px; font-size: 12px; }
+            .btn-send { min-width: 42px; width: 42px; height: 38px; padding: 0; border-radius: 11px; }
+            .btn-send .send-text { display: none; }
+            .compose-footer { margin-top: 6px; font-size: 8px; }
+            .compose-footer kbd { font-size: 8px; }
+            .toast { right: 16px; bottom: 16px; left: 16px; width: fit-content; margin: 0 auto; }
+        }
+
+        @media (max-width: 390px) {
+            .sidebar { min-height: 208px; }
+            .brand-caption { display: none; }
+            .btn-create { gap: 6px; padding: 0 9px; font-size: 10px; }
+            .welcome-actions { flex-direction: column; align-items: stretch; width: min(100%, 230px); margin-right: auto; margin-left: auto; }
+            .welcome-create, .welcome-join { width: 100%; }
+            .compose-footer span:first-child { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        }
+
+        @media (max-height: 700px) and (max-width: 720px) {
+            .sidebar { min-height: 190px; }
+            .welcome-art { width: 90px; height: 90px; margin-bottom: 10px; }
+            .welcome-core { width: 54px; height: 54px; border-radius: 18px; }
+            .welcome-orbit.one { inset: 2px; }
+            .welcome-orbit.two { inset: 13px; }
+            .welcome-actions { margin-top: 13px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar" aria-label="Панель комнат">
+            <div class="sidebar-header">
+                <div class="brand" aria-label="Лайм — чат-комнаты">
+                    <span class="brand-mark" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2v-5.5A7.5 7.5 0 1 1 20 11.5Z" />
+                            <path d="M8 11.5h.01M12 11.5h.01M16 11.5h.01" stroke-width="2.5" />
+                        </svg>
+                    </span>
+                    <span>
+                        <span class="brand-name">Лайм</span>
+                        <span class="brand-caption">ЧАТ-КОМНАТЫ</span>
+                    </span>
+                </div>
+                <button class="btn-create" id="btn-create" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    <span>Создать комнату</span>
+                </button>
+            </div>
+
+            <section class="join-card" aria-labelledby="join-title">
+                <div class="join-card-top">
+                    <div>
+                        <p class="eyebrow">БЫСТРОЕ ПОДКЛЮЧЕНИЕ</p>
+                        <h2 class="join-title" id="join-title">Войти по коду</h2>
+                    </div>
+                    <span class="join-decor" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    </span>
+                </div>
+                <form id="join-form" autocomplete="off">
+                    <div class="join-control">
+                        <label class="visually-hidden" for="join-input">Код комнаты</label>
+                        <input type="text" id="join-input" placeholder="Например, AB12CD" maxlength="6" spellcheck="false" aria-describedby="error-msg">
+                        <button class="join-submit" id="btn-join" type="submit" aria-label="Войти в комнату по коду">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                        </button>
+                    </div>
+                    <p id="error-msg" class="error-text" role="alert" aria-live="polite" hidden></p>
+                </form>
+            </section>
+
+            <div class="rooms-heading">
+                <p class="eyebrow">ВАШИ КОМНАТЫ</p>
+                <span class="room-count" id="room-count" aria-label="Количество комнат">0</span>
+            </div>
+            <nav class="rooms-list" id="rooms-list" aria-label="Список комнат"></nav>
+
+            <div class="sidebar-footer">
+                <span class="status-dot" aria-hidden="true"></span>
+                <span>Синхронизация вкладок</span>
+                <span class="local-tag">Локально</span>
+            </div>
+        </aside>
+
+        <main class="chat-area" aria-label="Чат">
+            <header class="chat-header">
+                <div class="room-heading">
+                    <span class="room-symbol" aria-hidden="true">#</span>
+                    <div class="chat-heading-copy">
+                        <p class="eyebrow" id="chat-eyebrow">ВАШЕ ПРОСТРАНСТВО</p>
+                        <h1 id="chat-title">Разговор начинается здесь</h1>
+                        <p class="chat-subtitle" id="chat-subtitle">Выберите комнату или создайте новую</p>
+                    </div>
+                </div>
+                <div class="code-box" id="code-box" hidden>
+                    <div class="code-meta">
+                        <span class="eyebrow">КОД КОМНАТЫ</span>
+                        <code class="code-value" id="chat-code"></code>
+                    </div>
+                    <button class="btn-copy" id="btn-copy" type="button" aria-label="Скопировать код комнаты">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+                        <span id="copy-label">Копировать</span>
+                    </button>
+                </div>
+            </header>
+
+            <section class="messages-container" id="messages-container" aria-label="Сообщения" aria-live="polite">
+                <div class="welcome-card" id="placeholder-text">
+                    <div class="welcome-art" aria-hidden="true">
+                        <span class="welcome-orbit one"></span>
+                        <span class="welcome-orbit two"></span>
+                        <span class="welcome-core">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2v-5.5A7.5 7.5 0 1 1 20 11.5Z"/><path d="M8 11.5h.01M12 11.5h.01M16 11.5h.01" stroke-width="2.5"/></svg>
+                        </span>
+                        <span class="welcome-spark a"></span>
+                        <span class="welcome-spark b"></span>
+                    </div>
+                    <p class="eyebrow">ПРОСТРАНСТВО ДЛЯ ВАЖНОГО</p>
+                    <h2>Разговор начинается здесь</h2>
+                    <p class="welcome-copy">Создайте комнату для своего диалога или войдите по коду. Всё нужное — под рукой.</p>
+                    <div class="welcome-actions">
+                        <button class="welcome-create" id="welcome-create" type="button">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                            Создать комнату
+                        </button>
+                        <button class="welcome-join" id="welcome-join" type="button">
+                            У меня есть код
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <form class="chat-input-area" id="input-panel" hidden>
+                <div class="composer-wrap">
+                    <span class="compose-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2v-5.5A7.5 7.5 0 1 1 20 11.5Z"/></svg>
+                    </span>
+                    <label class="visually-hidden" for="msg-input">Ваше сообщение</label>
+                    <input type="text" id="msg-input" placeholder="Напишите сообщение..." autocomplete="off" maxlength="4000">
+                    <button class="btn-send" id="btn-send" type="submit">
+                        <span class="send-text">Отправить</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/><path d="m12 13 7-8"/></svg>
+                    </button>
+                </div>
+                <div class="compose-footer">
+                    <span>Локальный чат · сообщения сохраняются в браузере</span>
+                    <span><kbd>Enter</kbd> — отправить</span>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        (() => {
+            'use strict';
+
+            const STORAGE_KEY = 'saved_rooms';
+            const CHANNEL_NAME = 'chat_sync_channel';
+            const myUserId = `user_${createId()}`;
+            let currentRoomCode = null;
+            let toastTimer = null;
+            let rooms = loadRooms();
+            let channel = null;
+
+            try {
+                if ('BroadcastChannel' in window) channel = new BroadcastChannel(CHANNEL_NAME);
+            } catch (_) {
+                channel = null;
+            }
+
+            const $ = (id) => document.getElementById(id);
+            const roomList = $('rooms-list');
+            const messagesContainer = $('messages-container');
+            const joinInput = $('join-input');
+            const errorMessage = $('error-msg');
+            const messageInput = $('msg-input');
+            const inputPanel = $('input-panel');
+            const toast = $('toast');
+
+            function createId() {
+                if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                    return window.crypto.randomUUID();
+                }
+                return `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+            }
+
+            function normalizeMessage(raw) {
+                if (!raw || typeof raw !== 'object' || typeof raw.text !== 'string') return null;
+                return {
+                    id: typeof raw.id === 'string' ? raw.id : '',
+                    senderId: typeof raw.senderId === 'string' ? raw.senderId : '',
+                    text: raw.text,
+                    time: typeof raw.time === 'string' ? raw.time : '',
+                    createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : 0
+                };
+            }
+
+            function normalizeRoom(raw) {
+                if (!raw || typeof raw !== 'object') return null;
+                const safeMessages = Array.isArray(raw.messages)
+                    ? raw.messages.map(normalizeMessage).filter(Boolean)
+                    : [];
+                return {
+                    name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : 'Комната',
+                    messages: safeMessages
+                };
+            }
+
+            function loadRooms() {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+                    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
+                    const result = {};
+                    for (const [rawCode, rawRoom] of Object.entries(saved)) {
+                        const code = String(rawCode).toUpperCase();
+                        if (!/^[A-Z0-9]{6}$/.test(code)) continue;
+                        const room = normalizeRoom(rawRoom);
+                        if (room) result[code] = room;
+                    }
+                    return result;
+                } catch (_) {
+                    return {};
+                }
+            }
+
+            function saveRooms() {
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
+                    return true;
+                } catch (_) {
+                    showToast('Не удалось сохранить данные в этом браузере.', 'error');
+                    return false;
+                }
+            }
+
+            function postToOtherTabs(data) {
+                try {
+                    if (channel) channel.postMessage(data);
+                } catch (_) {
+                    // Чат продолжит работать в этой вкладке, даже если синхронизация недоступна.
+                }
+            }
+
+            function generateCode() {
+                const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let code = '';
+                do {
+                    code = '';
+                    for (let i = 0; i < 6; i += 1) {
+                        code += alphabet[Math.floor(Math.random() * alphabet.length)];
+                    }
+                } while (rooms[code]);
+                return code;
+            }
+
+            function renderRoomsList() {
+                roomList.replaceChildren();
+                const codes = Object.keys(rooms);
+                $('room-count').textContent = String(codes.length);
+
+                if (codes.length === 0) {
+                    const empty = document.createElement('p');
+                    empty.className = 'rooms-empty';
+                    empty.textContent = 'Здесь появятся созданные комнаты и те, к которым вы подключились.';
+                    roomList.appendChild(empty);
+                    return;
+                }
+
+                codes.forEach((code, index) => {
+                    const room = rooms[code];
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = `room-item${code === currentRoomCode ? ' active' : ''}`;
+                    item.setAttribute('aria-current', code === currentRoomCode ? 'page' : 'false');
+                    item.style.animationDelay = `${Math.min(index * 35, 210)}ms`;
+
+                    const icon = document.createElement('span');
+                    icon.className = 'room-icon';
+                    icon.setAttribute('aria-hidden', 'true');
+                    icon.textContent = '#';
+
+                    const info = document.createElement('span');
+                    info.className = 'room-info';
+                    const name = document.createElement('span');
+                    name.className = 'room-name';
+                    name.textContent = room.name;
+                    const roomCode = document.createElement('span');
+                    roomCode.className = 'room-code';
+                    roomCode.textContent = `КОД · ${code}`;
+                    info.append(name, roomCode);
+
+                    const dot = document.createElement('span');
+                    dot.className = 'room-active-dot';
+                    dot.setAttribute('aria-hidden', 'true');
+                    item.append(icon, info, dot);
+                    item.addEventListener('click', () => selectRoom(code));
+                    roomList.appendChild(item);
+                });
+            }
+
+            function messageCountLabel(count) {
+                const lastTwo = count % 100;
+                const lastOne = count % 10;
+                if (lastTwo >= 11 && lastTwo <= 14) return `${count} сообщений`;
+                if (lastOne === 1) return `${count} сообщение`;
+                if (lastOne >= 2 && lastOne <= 4) return `${count} сообщения`;
+                return `${count} сообщений`;
+            }
+
+            function updateRoomHeader() {
+                const room = rooms[currentRoomCode];
+                if (!room) return;
+                $('chat-title').textContent = room.name;
+                $('chat-eyebrow').textContent = 'КОМНАТА';
+                $('chat-subtitle').textContent = room.messages.length
+                    ? `${messageCountLabel(room.messages.length)} · код можно скопировать справа`
+                    : 'Комната готова к первому сообщению';
+                $('chat-code').textContent = currentRoomCode;
+            }
+
+            function selectRoom(code) {
+                const room = rooms[code];
+                if (!room) return;
+                currentRoomCode = code;
+                renderRoomsList();
+                updateRoomHeader();
+                $('code-box').hidden = false;
+                inputPanel.hidden = false;
+                renderMessages();
+                messageInput.focus({ preventScroll: true });
+            }
+
+            function renderMessages() {
+                messagesContainer.replaceChildren();
+                const room = rooms[currentRoomCode];
+                if (!room) return;
+
+                if (room.messages.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty-room-state';
+                    const icon = document.createElement('span');
+                    icon.className = 'empty-room-icon';
+                    icon.setAttribute('aria-hidden', 'true');
+                    icon.textContent = '✳';
+                    const title = document.createElement('strong');
+                    title.textContent = 'Пока здесь тихо';
+                    const hint = document.createElement('span');
+                    hint.textContent = 'Отправьте первое сообщение — и диалог начнётся.';
+                    empty.append(icon, title, hint);
+                    messagesContainer.appendChild(empty);
+                    return;
+                }
+
+                room.messages.forEach((msg) => {
+                    const isMe = msg.senderId === myUserId;
+                    const article = document.createElement('article');
+                    article.className = `message ${isMe ? 'my-message' : 'other-message'}`;
+                    const meta = document.createElement('div');
+                    meta.className = 'message-meta';
+                    const author = document.createElement('span');
+                    author.className = 'message-author';
+                    author.textContent = isMe ? 'Вы' : 'Собеседник';
+                    const time = document.createElement('time');
+                    time.className = 'message-time';
+                    time.textContent = msg.time;
+                    meta.append(author, time);
+                    const bubble = document.createElement('div');
+                    bubble.className = 'message-bubble';
+                    bubble.textContent = msg.text;
+                    article.append(meta, bubble);
+                    messagesContainer.appendChild(article);
+                });
+
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            function showError(text) {
+                errorMessage.textContent = text;
+                errorMessage.hidden = false;
+                joinInput.setAttribute('aria-invalid', 'true');
+            }
+
+            function hideError() {
+                errorMessage.hidden = true;
+                errorMessage.textContent = '';
+                joinInput.removeAttribute('aria-invalid');
+            }
+
+            function showToast(text, type = 'success') {
+                toast.textContent = text;
+                toast.classList.toggle('toast-error', type === 'error');
+                toast.classList.add('is-visible');
+                window.clearTimeout(toastTimer);
+                toastTimer = window.setTimeout(() => toast.classList.remove('is-visible'), 2600);
+            }
+
+            function createRoom() {
+                const code = generateCode();
+                const newRoom = {
+                    name: `Комната ${Object.keys(rooms).length + 1}`,
+                    messages: []
+                };
+                rooms[code] = newRoom;
+                saveRooms();
+                postToOtherTabs({ type: 'ROOM_CREATED', code, room: newRoom });
+                hideError();
+                selectRoom(code);
+                showToast(`Комната создана · код ${code}`);
+            }
+
+            function joinRoom(event) {
+                event.preventDefault();
+                const code = joinInput.value.trim().toUpperCase();
+                if (!code) {
+                    showError('Введите код комнаты.');
+                    joinInput.focus();
+                    return;
+                }
+                if (!rooms[code]) {
+                    showError('Комната с таким кодом не найдена.');
+                    joinInput.focus();
+                    return;
+                }
+                hideError();
+                joinInput.value = '';
+                selectRoom(code);
+                showToast(`Вы вошли в «${rooms[code].name}»`);
+            }
+
+            function sendMessage(event) {
+                event.preventDefault();
+                const text = messageInput.value.trim();
+                if (!text || !currentRoomCode || !rooms[currentRoomCode]) return;
+
+                const messageData = {
+                    id: createId(),
+                    senderId: myUserId,
+                    text,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    createdAt: Date.now()
+                };
+
+                rooms[currentRoomCode].messages.push(messageData);
+                rooms[currentRoomCode].messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+                saveRooms();
+                renderMessages();
+                updateRoomHeader();
+                messageInput.value = '';
+                postToOtherTabs({ type: 'NEW_MESSAGE', roomCode: currentRoomCode, message: messageData });
+                messageInput.focus({ preventScroll: true });
+            }
+
+            function mergeIncomingRooms(incoming) {
+                if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return false;
+                let changed = false;
+
+                for (const [rawCode, rawRoom] of Object.entries(incoming)) {
+                    const code = String(rawCode).toUpperCase();
+                    if (!/^[A-Z0-9]{6}$/.test(code)) continue;
+                    const remote = normalizeRoom(rawRoom);
+                    if (!remote) continue;
+
+                    if (!rooms[code]) {
+                        rooms[code] = remote;
+                        changed = true;
+                        continue;
+                    }
+
+                    const local = rooms[code];
+                    const ids = new Set(local.messages.filter((msg) => msg.id).map((msg) => msg.id));
+                    for (const message of remote.messages) {
+                        if (message.id && ids.has(message.id)) continue;
+                        if (!message.id && local.messages.some((old) => old.text === message.text && old.senderId === message.senderId && old.time === message.time)) continue;
+                        local.messages.push(message);
+                        if (message.id) ids.add(message.id);
+                        changed = true;
+                    }
+                    local.messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+                    if (!local.name && remote.name) {
+                        local.name = remote.name;
+                        changed = true;
+                    }
+                }
+                return changed;
+            }
+
+            function applyIncomingState(incoming) {
+                if (!mergeIncomingRooms(incoming)) return;
+                saveRooms();
+                renderRoomsList();
+                if (currentRoomCode && rooms[currentRoomCode]) {
+                    updateRoomHeader();
+                    renderMessages();
+                }
+            }
+
+            function copyFallback(text) {
+                const helper = document.createElement('textarea');
+                helper.value = text;
+                helper.setAttribute('readonly', '');
+                helper.style.position = 'fixed';
+                helper.style.opacity = '0';
+                document.body.appendChild(helper);
+                helper.select();
+                let success = false;
+                try { success = document.execCommand('copy'); } catch (_) { success = false; }
+                helper.remove();
+                return success;
+            }
+
+            async function copyRoomCode() {
+                if (!currentRoomCode) return;
+                let copied = false;
+                try {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        await navigator.clipboard.writeText(currentRoomCode);
+                        copied = true;
+                    }
+                } catch (_) {
+                    copied = false;
+                }
+                if (!copied) copied = copyFallback(currentRoomCode);
+                if (copied) {
+                    $('copy-label').textContent = 'Скопировано';
+                    showToast('Код комнаты скопирован.');
+                    window.setTimeout(() => { $('copy-label').textContent = 'Копировать'; }, 1500);
+                } else {
+                    showToast(`Код комнаты: ${currentRoomCode}`, 'error');
+                }
+            }
+
+            $('btn-create').addEventListener('click', createRoom);
+            $('welcome-create').addEventListener('click', createRoom);
+            $('join-form').addEventListener('submit', joinRoom);
+            inputPanel.addEventListener('submit', sendMessage);
+            $('btn-copy').addEventListener('click', copyRoomCode);
+            $('welcome-join').addEventListener('click', () => {
+                joinInput.focus({ preventScroll: true });
+                joinInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+            joinInput.addEventListener('input', () => {
+                const cleaned = joinInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+                if (joinInput.value !== cleaned) joinInput.value = cleaned;
+                if (!errorMessage.hidden) hideError();
+            });
+
+            if (channel) {
+                channel.addEventListener('message', (event) => {
+                    const data = event.data;
+                    if (!data || typeof data !== 'object') return;
+                    if (data.type === 'ROOM_CREATED') {
+                        applyIncomingState({ [data.code]: data.room });
+                    } else if (data.type === 'NEW_MESSAGE' && typeof data.roomCode === 'string') {
+                        applyIncomingState({ [data.roomCode]: { ...rooms[data.roomCode], messages: [...(rooms[data.roomCode]?.messages || []), data.message] } });
+                    }
+                });
+            }
+
+            window.addEventListener('storage', (event) => {
+                if (event.key !== STORAGE_KEY || !event.newValue) return;
+                try { applyIncomingState(JSON.parse(event.newValue)); } catch (_) { /* Игнорируем некорректное внешнее значение. */ }
+            });
+
+            renderRoomsList();
+        })();
+    </script>
+</body>
+</html>
