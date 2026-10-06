@@ -258,7 +258,9 @@
 
         .sidebar-footer { display: flex; align-items: center; gap: 8px; margin-top: 11px; padding: 12px 3px 2px; border-top: 1px solid var(--line); color: #8c9a8e; font-size: 10px; }
         .status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #9bd668; box-shadow: 0 0 0 4px rgba(155,214,104,.09), 0 0 11px rgba(155,214,104,.45); animation: status-pulse 2.2s ease-in-out infinite; }
-        .local-tag { margin-left: auto; padding: 4px 7px; border: 1px solid rgba(205,244,122,.1); border-radius: 7px; color: #adc988; background: rgba(205,244,122,.045); font-size: 9px; }
+        .local-tag { margin-left: auto; padding: 4px 7px; border: 1px solid rgba(205,244,122,.1); border-radius: 7px; color: #adc988; background: rgba(205,244,122,.045); font-size: 9px; white-space: nowrap; }
+        .local-tag.is-offline { border-color: rgba(255,133,133,.18); color: #ffaaaa; background: rgba(255,133,133,.055); }
+        .status-dot.is-offline { background: #ff8585; box-shadow: 0 0 0 4px rgba(255,133,133,.09), 0 0 11px rgba(255,133,133,.3); animation: none; }
 
         /* Окно чата */
         .chat-area {
@@ -525,9 +527,9 @@
             <nav class="rooms-list" id="rooms-list" aria-label="Список комнат"></nav>
 
             <div class="sidebar-footer">
-                <span class="status-dot" aria-hidden="true"></span>
-                <span>Синхронизация вкладок</span>
-                <span class="local-tag">Локально</span>
+                <span class="status-dot is-offline" id="status-dot" aria-hidden="true"></span>
+                <span id="connection-label">Общий чат</span>
+                <span class="local-tag is-offline" id="connection-state" role="status" aria-live="polite">Проверка…</span>
             </div>
         </aside>
 
@@ -593,7 +595,7 @@
                     </button>
                 </div>
                 <div class="compose-footer">
-                    <span>Локальный чат · сообщения сохраняются в браузере</span>
+                    <span>Сообщения хранятся на сервере комнаты</span>
                     <span><kbd>Enter</kbd> — отправить</span>
                 </div>
             </form>
@@ -607,12 +609,16 @@
             'use strict';
 
             const STORAGE_KEY = 'saved_rooms';
+            const USER_ID_KEY = 'chat_user_id';
             const CHANNEL_NAME = 'chat_sync_channel';
-            const myUserId = `user_${createId()}`;
+            const API_BASE = '/api/rooms';
+            const POLL_INTERVAL = 2500;
+            const myUserId = loadUserId();
             let currentRoomCode = null;
             let toastTimer = null;
             let rooms = loadRooms();
             let channel = null;
+            const syncRequests = new Map();
 
             try {
                 if ('BroadcastChannel' in window) channel = new BroadcastChannel(CHANNEL_NAME);
@@ -628,6 +634,9 @@
             const messageInput = $('msg-input');
             const inputPanel = $('input-panel');
             const toast = $('toast');
+            const connectionLabel = $('connection-label');
+            const connectionState = $('connection-state');
+            const statusDot = $('status-dot');
 
             function createId() {
                 if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -636,14 +645,29 @@
                 return `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
             }
 
+            function loadUserId() {
+                try {
+                    const saved = localStorage.getItem(USER_ID_KEY);
+                    if (saved) return saved;
+                    const id = `user_${createId()}`;
+                    localStorage.setItem(USER_ID_KEY, id);
+                    return id;
+                } catch (_) {
+                    return `user_${createId()}`;
+                }
+            }
+
             function normalizeMessage(raw) {
                 if (!raw || typeof raw !== 'object' || typeof raw.text !== 'string') return null;
+                const seq = Number(raw.seq);
+                const createdAt = Number(raw.createdAt);
                 return {
                     id: typeof raw.id === 'string' ? raw.id : '',
                     senderId: typeof raw.senderId === 'string' ? raw.senderId : '',
                     text: raw.text,
                     time: typeof raw.time === 'string' ? raw.time : '',
-                    createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : 0
+                    seq: Number.isSafeInteger(seq) && seq > 0 ? seq : 0,
+                    createdAt: Number.isFinite(createdAt) ? createdAt : 0
                 };
             }
 
@@ -652,9 +676,13 @@
                 const safeMessages = Array.isArray(raw.messages)
                     ? raw.messages.map(normalizeMessage).filter(Boolean)
                     : [];
+                const maxSeq = safeMessages.reduce((max, message) => Math.max(max, message.seq), 0);
+                const rawCursor = Number(raw.cursor);
                 return {
                     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : 'Комната',
-                    messages: safeMessages
+                    messages: safeMessages,
+                    cursor: Number.isSafeInteger(rawCursor) && rawCursor >= 0 ? Math.max(rawCursor, maxSeq) : maxSeq,
+                    serverSynced: raw.serverSynced === true
                 };
             }
 
@@ -680,8 +708,60 @@
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
                     return true;
                 } catch (_) {
-                    showToast('Не удалось сохранить данные в этом браузере.', 'error');
+                    showToast('Не удалось сохранить список комнат в этом браузере.', 'error');
                     return false;
+                }
+            }
+
+            function setConnectionState(online) {
+                connectionLabel.textContent = online ? 'Общий чат' : 'Нет связи с сервером';
+                connectionState.textContent = online ? 'Онлайн' : 'Нет связи';
+                connectionState.classList.toggle('is-offline', !online);
+                statusDot.classList.toggle('is-offline', !online);
+            }
+
+            async function apiRequest(path, options = {}) {
+                const headers = new Headers(options.headers || {});
+                if (options.body && !headers.has('content-type')) {
+                    headers.set('content-type', 'application/json');
+                }
+
+                let response;
+                try {
+                    response = await fetch(path, { ...options, headers, cache: 'no-store' });
+                } catch (_) {
+                    setConnectionState(false);
+                    throw new Error('Не удалось подключиться к серверу. Проверьте интернет и настройки Cloudflare Pages.');
+                }
+
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.toLowerCase().includes('application/json')) {
+                    setConnectionState(false);
+                    throw new Error('Серверная часть чата не опубликована. Проверьте, что Cloudflare развернул папку functions/ и подключена база D1.');
+                }
+
+                let data;
+                try {
+                    data = await response.json();
+                } catch (_) {
+                    setConnectionState(false);
+                    throw new Error('Сервер вернул некорректный ответ. Проверьте настройки Cloudflare Pages.');
+                }
+
+                setConnectionState(response.status < 500);
+                if (!response.ok) {
+                    const error = new Error(typeof data.error === 'string' ? data.error : 'Ошибка сервера.');
+                    error.status = response.status;
+                    throw error;
+                }
+                return data;
+            }
+
+            async function checkServer() {
+                try {
+                    await apiRequest('/api/health');
+                } catch (_) {
+                    // Индикатор соединения и сообщения об ошибке обновит apiRequest.
                 }
             }
 
@@ -689,20 +769,77 @@
                 try {
                     if (channel) channel.postMessage(data);
                 } catch (_) {
-                    // Чат продолжит работать в этой вкладке, даже если синхронизация недоступна.
+                    // Обмен между вкладками необязателен: источник истины — сервер.
                 }
             }
 
-            function generateCode() {
-                const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-                let code = '';
-                do {
-                    code = '';
-                    for (let i = 0; i < 6; i += 1) {
-                        code += alphabet[Math.floor(Math.random() * alphabet.length)];
+            function sortMessages(messages) {
+                messages.sort((a, b) => {
+                    if (a.seq && b.seq) return a.seq - b.seq;
+                    return (a.createdAt || 0) - (b.createdAt || 0);
+                });
+            }
+
+            function mergeMessages(room, incoming) {
+                if (!Array.isArray(incoming)) return false;
+                let changed = false;
+                const ids = new Set(room.messages.filter((message) => message.id).map((message) => message.id));
+
+                for (const rawMessage of incoming) {
+                    const message = normalizeMessage(rawMessage);
+                    if (!message) continue;
+                    if (message.id && ids.has(message.id)) continue;
+                    if (!message.id && room.messages.some((old) => old.text === message.text && old.senderId === message.senderId && old.time === message.time && old.createdAt === message.createdAt)) continue;
+                    room.messages.push(message);
+                    if (message.id) ids.add(message.id);
+                    changed = true;
+                }
+                if (changed) sortMessages(room.messages);
+                return changed;
+            }
+
+            function mergeIncomingRooms(incoming) {
+                if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return false;
+                let changed = false;
+
+                for (const [rawCode, rawRoom] of Object.entries(incoming)) {
+                    const code = String(rawCode).toUpperCase();
+                    if (!/^[A-Z0-9]{6}$/.test(code)) continue;
+                    const remote = normalizeRoom(rawRoom);
+                    if (!remote) continue;
+
+                    if (!rooms[code]) {
+                        rooms[code] = remote;
+                        changed = true;
+                        continue;
                     }
-                } while (rooms[code]);
-                return code;
+
+                    const local = rooms[code];
+                    if (remote.name && local.name !== remote.name) {
+                        local.name = remote.name;
+                        changed = true;
+                    }
+                    if (mergeMessages(local, remote.messages)) changed = true;
+                    if (remote.cursor > local.cursor) {
+                        local.cursor = remote.cursor;
+                        changed = true;
+                    }
+                    if (remote.serverSynced && !local.serverSynced) {
+                        local.serverSynced = true;
+                        changed = true;
+                    }
+                }
+                return changed;
+            }
+
+            function applyIncomingState(incoming) {
+                if (!mergeIncomingRooms(incoming)) return;
+                saveRooms();
+                renderRoomsList();
+                if (currentRoomCode && rooms[currentRoomCode]) {
+                    updateRoomHeader();
+                    renderMessages();
+                }
             }
 
             function renderRoomsList() {
@@ -770,7 +907,7 @@
                 $('chat-code').textContent = currentRoomCode;
             }
 
-            function selectRoom(code) {
+            function selectRoom(code, { sync = true } = {}) {
                 const room = rooms[code];
                 if (!room) return;
                 currentRoomCode = code;
@@ -780,6 +917,7 @@
                 inputPanel.hidden = false;
                 renderMessages();
                 messageInput.focus({ preventScroll: true });
+                if (sync) syncRoom(code).catch(() => {});
             }
 
             function renderMessages() {
@@ -813,8 +951,10 @@
                     author.className = 'message-author';
                     author.textContent = isMe ? 'Вы' : 'Собеседник';
                     const time = document.createElement('time');
+                    time.textContent = msg.createdAt
+                        ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : msg.time;
                     time.className = 'message-time';
-                    time.textContent = msg.time;
                     meta.append(author, time);
                     const bubble = document.createElement('div');
                     bubble.className = 'message-bubble';
@@ -824,6 +964,52 @@
                 });
 
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            async function syncRoom(code) {
+                if (!rooms[code]) return false;
+                if (syncRequests.has(code)) return syncRequests.get(code);
+
+                const request = (async () => {
+                    const room = rooms[code];
+                    const firstSync = !room.serverSynced;
+                    const after = firstSync ? 0 : room.cursor;
+                    const result = await apiRequest(`${API_BASE}/${encodeURIComponent(code)}/messages?after=${after}`);
+                    const remoteMessages = Array.isArray(result.messages)
+                        ? result.messages.map(normalizeMessage).filter(Boolean)
+                        : [];
+                    let changed = false;
+
+                    if (firstSync) {
+                        room.messages = remoteMessages;
+                        room.serverSynced = true;
+                        changed = true;
+                    } else if (mergeMessages(room, remoteMessages)) {
+                        changed = true;
+                    }
+
+                    const nextCursor = Number(result.cursor);
+                    if (Number.isSafeInteger(nextCursor) && nextCursor > room.cursor) {
+                        room.cursor = nextCursor;
+                        changed = true;
+                    }
+                    if (changed) {
+                        saveRooms();
+                        if (currentRoomCode === code) {
+                            updateRoomHeader();
+                            renderRoomsList();
+                            renderMessages();
+                        }
+                    }
+                    return true;
+                })();
+
+                syncRequests.set(code, request);
+                try {
+                    return await request;
+                } finally {
+                    if (syncRequests.get(code) === request) syncRequests.delete(code);
+                }
             }
 
             function showError(text) {
@@ -843,106 +1029,109 @@
                 toast.classList.toggle('toast-error', type === 'error');
                 toast.classList.add('is-visible');
                 window.clearTimeout(toastTimer);
-                toastTimer = window.setTimeout(() => toast.classList.remove('is-visible'), 2600);
+                toastTimer = window.setTimeout(() => toast.classList.remove('is-visible'), 3600);
             }
 
-            function createRoom() {
-                const code = generateCode();
-                const newRoom = {
-                    name: `Комната ${Object.keys(rooms).length + 1}`,
-                    messages: []
-                };
-                rooms[code] = newRoom;
-                saveRooms();
-                postToOtherTabs({ type: 'ROOM_CREATED', code, room: newRoom });
+            async function createRoom() {
                 hideError();
-                selectRoom(code);
-                showToast(`Комната создана · код ${code}`);
+                const createButtons = [$('btn-create'), $('welcome-create')];
+                createButtons.forEach((button) => { button.disabled = true; });
+                try {
+                    const result = await apiRequest(API_BASE, {
+                        method: 'POST',
+                        body: JSON.stringify({ name: `Комната ${Object.keys(rooms).length + 1}` })
+                    });
+                    const code = String(result.code || '').toUpperCase();
+                    if (!/^[A-Z0-9]{6}$/.test(code)) throw new Error('Сервер не вернул код комнаты.');
+
+                    const oldRoom = rooms[code];
+                    rooms[code] = {
+                        name: typeof result.name === 'string' ? result.name : (oldRoom?.name || 'Комната'),
+                        messages: [],
+                        cursor: 0,
+                        serverSynced: true
+                    };
+                    saveRooms();
+                    postToOtherTabs({ type: 'ROOM_CREATED', code, room: rooms[code] });
+                    selectRoom(code);
+                    showToast(`Комната создана · код ${code}`);
+                } catch (error) {
+                    showToast(error.message || 'Не удалось создать комнату.', 'error');
+                } finally {
+                    createButtons.forEach((button) => { button.disabled = false; });
+                }
             }
 
-            function joinRoom(event) {
+            async function joinRoom(event) {
                 event.preventDefault();
                 const code = joinInput.value.trim().toUpperCase();
-                if (!code) {
-                    showError('Введите код комнаты.');
+                if (!/^[A-Z0-9]{6}$/.test(code)) {
+                    showError('Введите код комнаты из шести букв или цифр.');
                     joinInput.focus();
                     return;
                 }
-                if (!rooms[code]) {
-                    showError('Комната с таким кодом не найдена.');
+
+                const joinButton = $('btn-join');
+                joinButton.disabled = true;
+                try {
+                    const result = await apiRequest(`${API_BASE}/${encodeURIComponent(code)}`);
+                    const cached = rooms[code];
+                    rooms[code] = {
+                        name: typeof result.name === 'string' ? result.name : 'Комната',
+                        messages: cached?.messages || [],
+                        cursor: cached?.cursor || 0,
+                        serverSynced: cached?.serverSynced === true
+                    };
+                    await syncRoom(code);
+                    saveRooms();
+                    hideError();
+                    joinInput.value = '';
+                    selectRoom(code, { sync: false });
+                    showToast(`Вы вошли в «${rooms[code].name}»`);
+                } catch (error) {
+                    showError(error.status === 404
+                        ? 'Комната не найдена на сервере. Проверьте код и убедитесь, что создатель уже создал её на опубликованном сайте.'
+                        : (error.message || 'Не удалось подключиться к комнате.'));
                     joinInput.focus();
-                    return;
+                } finally {
+                    joinButton.disabled = false;
                 }
-                hideError();
-                joinInput.value = '';
-                selectRoom(code);
-                showToast(`Вы вошли в «${rooms[code].name}»`);
             }
 
-            function sendMessage(event) {
+            async function sendMessage(event) {
                 event.preventDefault();
                 const text = messageInput.value.trim();
-                if (!text || !currentRoomCode || !rooms[currentRoomCode]) return;
+                const roomCode = currentRoomCode;
+                if (!text || !roomCode || !rooms[roomCode]) return;
 
-                const messageData = {
-                    id: createId(),
-                    senderId: myUserId,
-                    text,
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    createdAt: Date.now()
-                };
+                const sendButton = $('btn-send');
+                sendButton.disabled = true;
+                messageInput.disabled = true;
+                try {
+                    const result = await apiRequest(`${API_BASE}/${encodeURIComponent(roomCode)}/messages`, {
+                        method: 'POST',
+                        body: JSON.stringify({ id: createId(), senderId: myUserId, text })
+                    });
+                    const message = normalizeMessage(result.message);
+                    if (!message) throw new Error('Сервер не сохранил сообщение.');
 
-                rooms[currentRoomCode].messages.push(messageData);
-                rooms[currentRoomCode].messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-                saveRooms();
-                renderMessages();
-                updateRoomHeader();
-                messageInput.value = '';
-                postToOtherTabs({ type: 'NEW_MESSAGE', roomCode: currentRoomCode, message: messageData });
-                messageInput.focus({ preventScroll: true });
-            }
-
-            function mergeIncomingRooms(incoming) {
-                if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return false;
-                let changed = false;
-
-                for (const [rawCode, rawRoom] of Object.entries(incoming)) {
-                    const code = String(rawCode).toUpperCase();
-                    if (!/^[A-Z0-9]{6}$/.test(code)) continue;
-                    const remote = normalizeRoom(rawRoom);
-                    if (!remote) continue;
-
-                    if (!rooms[code]) {
-                        rooms[code] = remote;
-                        changed = true;
-                        continue;
+                    const room = rooms[roomCode];
+                    room.serverSynced = true;
+                    mergeMessages(room, [message]);
+                    room.cursor = Math.max(room.cursor, message.seq || 0);
+                    saveRooms();
+                    if (currentRoomCode === roomCode) {
+                        renderMessages();
+                        updateRoomHeader();
                     }
-
-                    const local = rooms[code];
-                    const ids = new Set(local.messages.filter((msg) => msg.id).map((msg) => msg.id));
-                    for (const message of remote.messages) {
-                        if (message.id && ids.has(message.id)) continue;
-                        if (!message.id && local.messages.some((old) => old.text === message.text && old.senderId === message.senderId && old.time === message.time)) continue;
-                        local.messages.push(message);
-                        if (message.id) ids.add(message.id);
-                        changed = true;
-                    }
-                    local.messages.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-                    if (!local.name && remote.name) {
-                        local.name = remote.name;
-                        changed = true;
-                    }
-                }
-                return changed;
-            }
-
-            function applyIncomingState(incoming) {
-                if (!mergeIncomingRooms(incoming)) return;
-                saveRooms();
-                renderRoomsList();
-                if (currentRoomCode && rooms[currentRoomCode]) {
-                    updateRoomHeader();
-                    renderMessages();
+                    messageInput.value = '';
+                    postToOtherTabs({ type: 'NEW_MESSAGE', roomCode, message });
+                } catch (error) {
+                    showToast(error.message || 'Не удалось отправить сообщение.', 'error');
+                } finally {
+                    sendButton.disabled = false;
+                    messageInput.disabled = false;
+                    messageInput.focus({ preventScroll: true });
                 }
             }
 
@@ -1000,10 +1189,19 @@
                 channel.addEventListener('message', (event) => {
                     const data = event.data;
                     if (!data || typeof data !== 'object') return;
-                    if (data.type === 'ROOM_CREATED') {
+                    if (data.type === 'ROOM_CREATED' && typeof data.code === 'string') {
                         applyIncomingState({ [data.code]: data.room });
                     } else if (data.type === 'NEW_MESSAGE' && typeof data.roomCode === 'string') {
-                        applyIncomingState({ [data.roomCode]: { ...rooms[data.roomCode], messages: [...(rooms[data.roomCode]?.messages || []), data.message] } });
+                        const code = data.roomCode.toUpperCase();
+                        const room = rooms[code] || { name: 'Комната', messages: [], cursor: 0, serverSynced: false };
+                        applyIncomingState({
+                            [code]: {
+                                ...room,
+                                messages: [...room.messages, data.message],
+                                cursor: Math.max(room.cursor, Number(data.message?.seq) || 0),
+                                serverSynced: true
+                            }
+                        });
                     }
                 });
             }
@@ -1013,7 +1211,19 @@
                 try { applyIncomingState(JSON.parse(event.newValue)); } catch (_) { /* Игнорируем некорректное внешнее значение. */ }
             });
 
+            window.addEventListener('online', () => {
+                checkServer();
+                if (currentRoomCode) syncRoom(currentRoomCode).catch(() => {});
+            });
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && currentRoomCode) syncRoom(currentRoomCode).catch(() => {});
+            });
+            window.setInterval(() => {
+                if (!document.hidden && currentRoomCode) syncRoom(currentRoomCode).catch(() => {});
+            }, POLL_INTERVAL);
+
             renderRoomsList();
+            checkServer();
         })();
     </script>
 </body>
